@@ -1,6 +1,6 @@
 #include <cstdio>
 #include <SFML/Graphics.hpp>
-#include "chip8.h"
+#include "chip8/chip8.h"
 
 
 int main(int argc, char **argv)
@@ -17,7 +17,7 @@ int main(int argc, char **argv)
   emulator.loadBinary(argv[1]);
 
   emulator.Run();
-  
+
     /*
   while (true)
   {
