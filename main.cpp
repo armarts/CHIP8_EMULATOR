@@ -1,5 +1,4 @@
 #include <cstdio>
-#include <SFML/Graphics.hpp>
 #include "chip8/chip8.h"
 
 

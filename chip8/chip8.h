@@ -5,13 +5,12 @@
 #include <cstring>
 #include <fstream>
 #include <cstdio>
-//#include <SFML/Graphics.hpp>
 #include <stdint.h>
 #include "../keyboard/keyboard.h"
 
 /* error variable */
 
-int error = 0;
+static int Global_Error = 0;
 
 enum ERROR
 {

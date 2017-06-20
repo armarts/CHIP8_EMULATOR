@@ -7,6 +7,7 @@
  */
 
 #include <stdlib.h>
+#include <SFML/Graphics.hpp>
 #include <time.h>
 #include "chip8.h"
 
@@ -157,7 +158,7 @@ void Chip8::Ret(int opcode)
 
   if (m_SP <= 0 || m_SP >= STACKSIZE)
   {
-    error = STACKERROR;
+    Global_Error = STACKERROR;
     return ;
   }
 
@@ -172,7 +173,7 @@ void Chip8::Jp(int opcode)
 
   if (address < ENTRYPOINT || address >= MEMORYSIZE)
   {
-    error = ADDRESSERR;
+    Global_Error = ADDRESSERR;
     return ;
   }
 
@@ -187,7 +188,7 @@ void Chip8::Call(int opcode)
 
   if (address < ENTRYPOINT || address >= MEMORYSIZE)
   {
-    error = ADDRESSERR;
+    Global_Error = ADDRESSERR;
     return ;
   }
   m_stack[m_SP++] = m_PC;
@@ -380,7 +381,7 @@ void Chip8::Jp_Reg(int opcode)
 
   if (address < ENTRYPOINT || address >= MEMORYSIZE)
   {
-    error = ADDRESSERR;
+    Global_Error = ADDRESSERR;
     return ;
   }
 
