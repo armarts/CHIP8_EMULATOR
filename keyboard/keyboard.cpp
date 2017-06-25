@@ -1,36 +1,37 @@
+/*
+ *  Mega emulator chip8
+ *  Copyright (C) 2017 Atayan Garik <olympg@yandex.ru>
+ *
+ *  This program is free software
+ *  may 2017
+ */
+
+
 #include "keyboard.h"
-#include <stdio.h>
 
-Keyboard::Keyboard()
+Chip8Keyboard::Chip8Keyboard()
 {
     for(int i = 0; i < 16; i++)
-        key[i] = false;
+        m_key[i] = false;
 }
 
-void Keyboard::pressKey(uint8_t keyNumber)
+void Chip8Keyboard::pressKey(uint8_t keyNumber)
 {
-    key[keyNumber] = true;
+    m_key[keyNumber] = true;
 }
 
-bool Keyboard::isKeyPressed(uint8_t keyNumber)
+bool Chip8Keyboard::isKeyPressed(uint8_t keyNumber)
 {
-    /*if(KeyNumber > 16)
-        return */
-    return key[keyNumber];
+    return m_key[keyNumber];
 }
 
-void Keyboard::releaseKey(uint8_t keyNumber)
+void Chip8Keyboard::releaseKey(uint8_t keyNumber)
 {
-    key[keyNumber] = false;
+    m_key[keyNumber] = false;
 }
 
-void Keyboard::dump()
-{
-    for(int i = 0; i < 16; i++)
-        printf("[%d] = %d\n", i, key[i]);
-}
 
-int Keyboard::isAnyKeyPressed()
+int Chip8Keyboard::isAnyKeyPressed()
 {
 
   for (int i = 0; i < 16; i++)

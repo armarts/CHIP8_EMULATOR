@@ -7,28 +7,8 @@
  */
 
 #include <stdlib.h>
-#include <SFML/Graphics.hpp>
 #include <time.h>
 #include "chip8.h"
-
-#define BYTESIZE 0x8
-#define BYTE 0x100
-#define MEMORYSIZE 0x1000
-#define VIDEOMEMORY 0xF00
-#define NEXT 0x2
-#define ENTRYPOINT 0x200
-#define STACKSIZE 0x10
-#define SCREENSIZE 0x800
-#define HEIGHT 0x40
-#define WIDTH 0x20
-#define REGNUM 0x10
-#define TIMERSNUM 0x2
-#define FONTSIZE 0x50
-#define ADDRESSMASK(arg) (arg & 0x0FFF)
-#define XMASK(arg) ((arg & 0x0F00) >> 8)
-#define YMASK(arg) ((arg & 0x00F0) >> 4)
-#define NIBBLE(arg) (arg & 0x000F)
-#define CONSTMASK(arg) (arg & 0x00FF)
 
 #define ind(x, y) ( ((y + WIDTH) % WIDTH) * HEIGHT + ((x + HEIGHT) % HEIGHT) )
 
@@ -39,7 +19,7 @@ Chip8::Chip8() : BaseCPU(REGNUM, TIMERSNUM),
                  m_DelayTimer(0),
                  m_SoundTimer(0)
 {
-    m_okConstruct = true;
+    okConstruct = true;
 
     m_memory   = (uint8_t*)  calloc(MEMORYSIZE, sizeof(uint8_t));
     m_stack    = (uint16_t*) calloc(STACKSIZE, sizeof(uint16_t));
@@ -53,9 +33,9 @@ Chip8::Chip8() : BaseCPU(REGNUM, TIMERSNUM),
     drawFlag = true;
 
     if(m_memory == NULL || m_stack == NULL || m_register == NULL || m_gfx == NULL)
-      m_okConstruct = false;
+      okConstruct = false;
 
-    if (m_okConstruct)
+    if (okConstruct)
     {
       for(int i = 0; i < FONTSIZE; i++)
         m_memory[i] = Chip8_fontset[i];
@@ -82,7 +62,7 @@ void Chip8::dump()
     printf("RegCount = %d\n", m_RegCount);
     printf("TimerCount = %d\n", m_TimerCount);
     printf("I = %d\n", m_I);
-    printf("okConstruct = %d\n", m_okConstruct);
+    printf("okConstruct = %d\n", okConstruct);
     printf("PC = %d\n", m_PC);
     printf("SP = %d\n", m_SP);
 
@@ -104,8 +84,6 @@ int FileSize(FILE *file)
 int Chip8::loadBinary(const char* path)
 {
 
-    /* Open file */
-
     FILE *rom = fopen(path, "rb");
 
     if (!rom)
@@ -121,12 +99,14 @@ int Chip8::loadBinary(const char* path)
 
     size_t result = fread(romBuffer, sizeof(uint8_t), romSize, rom);
 
-    /* Close File */
-
     fclose(rom);
 
     if (result != romSize)
         return BADREAD;
+
+    /* Valid memory */
+    if (romSize > MEMORYSIZE - ENTRYPOINT)
+        return BIGFILE;
 
     for (size_t i = 0; i < romSize; i++)
         m_memory[m_PC + i] = romBuffer[i];
@@ -137,160 +117,177 @@ int Chip8::loadBinary(const char* path)
 
 }
 
+bool Chip8::drawStatus() const
+{
+    return drawFlag;
+}
+
 /* @@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@ */
 /* /---------------------------------------------------------------- */
 /*             List of function chip-8                               */
 
 /* 00E0 - CLS */
 
-void Chip8::Cls(int opcode)
+int Chip8::Cls(int opcode)
 {
     for (int i = 0; i < SCREENSIZE; i++)
       m_gfx[i] = 0;
 
-    drawFlag = true;
+    return 0;
 }
 
 // 00EE - RET
 
-void Chip8::Ret(int opcode)
+int Chip8::Ret(int opcode)
 {
 
   if (m_SP <= 0 || m_SP >= STACKSIZE)
   {
-    Global_Error = STACKERROR;
-    return ;
+    error = STACKERROR;
+    return 0;
   }
 
   m_PC = m_stack[--m_SP];
+  return 0;
 }
 
 // 1nnn - JP addr
 
-void Chip8::Jp(int opcode)
+int Chip8::Jp(int opcode)
 {
   uint16_t address = ADDRESSMASK(opcode);
 
   if (address < ENTRYPOINT || address >= MEMORYSIZE)
   {
-    Global_Error = ADDRESSERR;
-    return ;
+    error = ADDRESSERR;
+    return 0;
   }
 
-  m_PC = address - NEXT;
+  m_PC = address;
+  return 1;
 }
 
 // 2nnn - CALL addr
 
-void Chip8::Call(int opcode)
+int Chip8::Call(int opcode)
 {
   uint16_t address = ADDRESSMASK(opcode);
 
   if (address < ENTRYPOINT || address >= MEMORYSIZE)
   {
-    Global_Error = ADDRESSERR;
-    return ;
+    error = ADDRESSERR;
+    return 0;
   }
   m_stack[m_SP++] = m_PC;
-  m_PC = address - NEXT;
+  m_PC = address;
+  return 1;
 }
 
 // 3xkk - SE Vx, byte
 
-void Chip8::Se_Const(int opcode)
+int Chip8::Se_Const(int opcode)
 {
   int x_reg = XMASK(opcode);
   uint8_t kk = CONSTMASK(opcode);
 
   if (m_register[x_reg] == kk)
     m_PC += NEXT;
+  return 0; 
 }
 
 // 4xkk - SNE Vx, byte
 
-void Chip8::Sne_Const(int opcode)
+int Chip8::Sne_Const(int opcode)
 {
   int x_reg = XMASK(opcode);
   uint8_t kk = CONSTMASK(opcode);
 
   if (m_register[x_reg] != kk)
     m_PC += NEXT;
+  return 0;
 }
 
 // 5xy0 - SE Vx, Vy
 
-void Chip8::Se_Reg(int opcode)
+int Chip8::Se_Reg(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
 
   if (m_register[x_reg] == m_register[y_reg])
    m_PC += NEXT;
+  return 0;
 }
 
 // 6xkk - LD Vx, byte
 
-void Chip8::Ld_Const(int opcode)
+int Chip8::Ld_Const(int opcode)
 {
   int x_reg = XMASK(opcode);
   uint8_t kk = CONSTMASK(opcode);
 
   m_register[x_reg] = kk;
+  return 0;
 }
 
 // 7xkk - ADD Vx, byte
 
-void Chip8::Add_Const(int opcode)
+int Chip8::Add_Const(int opcode)
 {
   int x_reg = XMASK(opcode);
   uint8_t kk = CONSTMASK(opcode);
 
   m_register[x_reg] += kk;
+  return 0;
 }
 
 // 8xy0 - LD Vx, Vy
 
-void Chip8::Ld_Reg(int opcode)
+int Chip8::Ld_Reg(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
 
   m_register[x_reg] = m_register[y_reg];
+  return 0;
 }
 
 // 8xy1 - OR Vx, Vy
 
-void Chip8::Or(int opcode)
+int Chip8::Or(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
 
   m_register[x_reg] |= m_register[y_reg];
+  return 0;
 }
 
 // 8xy2 - AND Vx, Vy
 
-void Chip8::And(int opcode)
+int Chip8::And(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
 
   m_register[x_reg] &= m_register[y_reg];
+  return 0;
 }
 
 // 8xy3 - XOR Vx, Vy
 
-void Chip8::Xor(int opcode)
+int Chip8::Xor(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
 
   m_register[x_reg] ^= m_register[y_reg];
+  return 0;
 }
 
 // 8xy4 - ADD Vx, Vy
 
-void Chip8::Add_Reg(int opcode)
+int Chip8::Add_Reg(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
@@ -301,11 +298,12 @@ void Chip8::Add_Reg(int opcode)
     m_register[VF] = 1;
 
   m_register[x_reg] += m_register[y_reg];
+  return 0;
 }
 
 // 8xy5 - SUB Vx, Vy
 
-void Chip8::Sub(int opcode)
+int Chip8::Sub(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
@@ -316,21 +314,23 @@ void Chip8::Sub(int opcode)
     m_register[VF] = 0;
 
   m_register[x_reg] -= m_register[y_reg];
+  return 0;
 }
 
 // 8xy6 - SHR Vx {, Vy}
 
-void Chip8::Shr(int opcode)
+int Chip8::Shr(int opcode)
 {
   int x_reg = XMASK(opcode);
 
   m_register[VF] = m_register[x_reg] & 1;
   m_register[x_reg] >>= 1;
+  return 0;
 }
 
 // 8xy7 - SUBN Vx, Vy
 
-void Chip8::SubN(int opcode)
+int Chip8::SubN(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
@@ -341,72 +341,81 @@ void Chip8::SubN(int opcode)
     m_register[VF] = 0;
 
   m_register[x_reg] = m_register[y_reg] - m_register[x_reg];
+  return 0;
 }
 
 // 8xyE - SHL Vx, {, Vy}
 
-void Chip8::Shl(int opcode)
+int Chip8::Shl(int opcode)
 {
   int x_reg = XMASK(opcode);
 
-  m_register[VF] = m_register[x_reg] >> 7;
+  m_register[VF] = m_register[x_reg] >> 7; // TO DO
   m_register[x_reg] <<= 1;
+  return 0;
 }
 
 // 9xy0 - SNE Vx, Vy
 
-void Chip8::Sne_Reg(int opcode)
+int Chip8::Sne_Reg(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
 
   if (m_register[x_reg] != m_register[y_reg])
-   m_PC += NEXT;
+    m_PC += NEXT;
+  return 0;
 }
 
 // Annn - LD I, addr
 
-void Chip8::Ld_I(int opcode)
+int Chip8::Ld_I(int opcode)
 {
-  uint16_t address = opcode & 0x0FFF;
+  uint16_t address =ADDRESSMASK(opcode);
 
   m_I = address;
+  return 0;
 }
 
 // Bnnn - JP V0, addr
 
-void Chip8::Jp_Reg(int opcode)
+int Chip8::Jp_Reg(int opcode)
 {
-  uint16_t address = opcode & 0x0FFF;
+  uint16_t address = ADDRESSMASK(opcode);
 
   if (address < ENTRYPOINT || address >= MEMORYSIZE)
   {
-    Global_Error = ADDRESSERR;
-    return ;
+    error = ADDRESSERR;
+    return 0;
   }
 
-  m_PC = m_register[V0] + address - NEXT;
+  m_PC = m_register[V0] + address;
+  return 1;
 }
 
 // Cxkk - RND, Vx, byte
 
-void Chip8::Rnd(int opcode)
+int Chip8::Rnd(int opcode)
 {
   int x_reg  = XMASK(opcode);
   int kk = (CONSTMASK(opcode));
 
   srand( time(NULL) );
-  m_register[x_reg] = (rand() % 255) & kk;
+  m_register[x_reg] = (rand() % 255) & kk; // TO DO
+  return 0;
 }
 
-void Chip8::Drw(int opcode)
+// DXYN - Drw sprite(N bytes) begining Vx, Vy
+
+int Chip8::Drw(int opcode)
 {
   int x_reg = XMASK(opcode);
   int y_reg = YMASK(opcode);
-  int n = (opcode & 0x000F);
+  int n = NIBBLE(opcode);
 
   int startX = m_register[x_reg];
   int startY = m_register[y_reg];
+  drawFlag = false;
 
   m_register[VF] = 0;
   for (int y = 0; y < n; y++)
@@ -416,8 +425,11 @@ void Chip8::Drw(int opcode)
     {
 
       int *pixel = m_gfx + ind(startX + x, startY + y);
+      int bit = (pixels >> (7 - x)) & 0x1;
+      if (*pixel ^ bit != 0)
+        drawFlag = true;
 
-      if (pixels & (0x80 >> x))
+      if (bit)
       {
         if (*pixel)
           m_register[VF] = 1;
@@ -425,92 +437,99 @@ void Chip8::Drw(int opcode)
       }
     }
   }
-
-  drawFlag = true;
+ 
+  return 0;
 }
 
 // Ex9E - SKP Vx
 
-void Chip8::Skp(int opcode)
+int Chip8::Skp(int opcode)
 {
   int x_reg = XMASK(opcode);
 
   if (keyboard.isKeyPressed(m_register[x_reg]))
     m_PC += NEXT;
+  return 0;
 }
 
 // ExA1 - SKNP Vx
 
-void Chip8::Sknp(int opcode)
+int Chip8::Sknp(int opcode)
 {
   int x_reg = XMASK(opcode);
 
   if (!keyboard.isKeyPressed(m_register[x_reg]))
     m_PC += NEXT;
+  return 0;
 }
 
 // Fx07 - LD Vx, DT
 
-void Chip8::Ld_Reg_Dt(int opcode)
+int Chip8::Ld_Reg_Dt(int opcode)
 {
   int x_reg = XMASK(opcode);
 
   m_register[x_reg] = m_DelayTimer;
+  return 0;
 }
 
 // Fx0A - LD Vx, K
 
-void Chip8::Ld_Key(int opcode)
+int Chip8::Ld_Key(int opcode)
 {
-  m_PC -= NEXT;
   int x_reg = XMASK(opcode);
 
   int key = keyboard.isAnyKeyPressed();
   if (key != -1)
   {
     m_register[x_reg] = key;
-    m_PC += NEXT;
+    return 0;
   }
+  return 1;
 }
 
 // Fx15 - LD DT, Vx
 
-void Chip8::Ld_Dt(int opcode)
+int Chip8::Ld_Dt(int opcode)
 {
   int x_reg = XMASK(opcode);
 
   m_DelayTimer = m_register[x_reg];
+  return 0;
 }
 
 // Fx18 - LD ST, Vx
 
-void Chip8::Ld_St(int opcode)
+int Chip8::Ld_St(int opcode)
 {
   int x_reg = XMASK(opcode);
   m_SoundTimer = m_register[x_reg];
+  return 0;
 }
 
 // Fx1E - ADD I, Vx
 
-void Chip8::Add_I(int opcode)
+int Chip8::Add_I(int opcode)
 {
   int x_reg = XMASK(opcode);
 
   m_I += m_register[x_reg];
+  return 0;
 }
 
 // Fx29 - LD F, Vx
 
-void Chip8::Ld_Spr(int opcode)
+int Chip8::Ld_Spr(int opcode)
 {
   int x_reg = XMASK(opcode);
 
-  m_I = m_register[x_reg] * 0x5;
+  m_I = m_register[x_reg] * NUMBERLENGTH;
+  return 0;
 }
 
 // Fx33 - LD B, Vx
 
-void Chip8::Ld_Bcd(int opcode)
+int Chip8::Ld_Bcd(int opcode)
 {
   int x_reg = XMASK(opcode);
 
@@ -519,11 +538,12 @@ void Chip8::Ld_Bcd(int opcode)
   m_memory[m_I] = m_register[x_reg] / 100;
   m_memory[m_I + 1] = (m_register[x_reg] / 10) % 10;
   m_memory[m_I + 2] = (m_register[x_reg] % 10);
+  return 0;
 }
 
 // Fx55 - LD [I], Vx
 
-void Chip8::Ld_Reg_Mem(int opcode)
+int Chip8::Ld_Reg_Mem(int opcode)
 {
   int x_reg = XMASK(opcode);
 
@@ -531,11 +551,12 @@ void Chip8::Ld_Reg_Mem(int opcode)
     m_memory[m_I + i] = m_register[i];
 
   m_I += x_reg + 1;
+  return 0;
 }
 
 // FX65 - LD Vx, [I]
 
-void Chip8::Ld_Reg_Load(int opcode)
+int Chip8::Ld_Reg_Load(int opcode)
 {
   int x_reg = XMASK(opcode);
 
@@ -543,9 +564,20 @@ void Chip8::Ld_Reg_Load(int opcode)
     m_register[i] = m_memory[m_I + i];
 
   m_I += x_reg + 1;
+  return 0;
 }
 
 /* End Of ListFunctions */
+
+
+void Chip8::decreaseTimers()
+{
+  if(m_DelayTimer > 0)
+    --m_DelayTimer;
+  
+  if(m_SoundTimer > 0)
+    --m_SoundTimer;
+}
 
 uint16_t Chip8::fetch()
 {
@@ -557,6 +589,8 @@ uint16_t Chip8::fetch()
   result |= m_memory[m_PC + 1];
   return result;
 }
+
+// have to add operator switch
 
 uint16_t Chip8::decode(uint16_t cmd)
 {
@@ -581,139 +615,19 @@ uint16_t Chip8::decode(uint16_t cmd)
 
 void Chip8::execute(uint16_t decodedCmd, uint16_t cmd)
 {
+  transaction_callBack cw = NULL;
   for (int i = 0; i < 34; i++)
     if (decodedCmd == FSM[i].code)
     {
       /* call system function */
-      transaction_callBack cw = FSM[i].worker;
-      (this->*cw)(cmd);
-      m_PC += NEXT;
+      cw = FSM[i].worker;
+      int goNext = (this->*cw)(cmd);
+      if(goNext == 0)
+        m_PC += NEXT;
       break;
     }
+  if (cw == NULL)
+    error = UNKNOWN;
 }
 
-void Chip8::Run()
-{
-  sf::RenderWindow window(sf::VideoMode(640, 320), "Chip8");
 
-  // clear the window with black color
-  window.clear(sf::Color::White);
-
-  //window.setVerticalSyncEnabled(true);
-
-  double time1 = (double) clock() / CLOCKS_PER_SEC;
-  int opcode_per_second = 0;
-  int limit = 10;
-
-  // run the program as long as the window is open
-  while (window.isOpen())
-  {
-    // check all the window's events that were triggered since the last iteration of the loop
-    sf::Event event;
-
-
-    while (window.pollEvent(event))
-    {
-      // "close requested" event: we close the window
-
-      switch(event.type)
-      {
-        case(sf::Event::Closed):
-          window.close();
-          break;
-
-        case(sf::Event::KeyPressed):
-          switch(event.key.code)
-          {
-              case sf::Keyboard::Num1: keyboard.pressKey(0x1); break;
-              case sf::Keyboard::Num2: keyboard.pressKey(0x2); break;
-              case sf::Keyboard::Num3: keyboard.pressKey(0x3); break;
-              case sf::Keyboard::Num4: keyboard.pressKey(0xc); break;
-              case sf::Keyboard::Q: keyboard.pressKey(0x4); break;
-              case sf::Keyboard::W: keyboard.pressKey(0x5); break;
-              case sf::Keyboard::E: keyboard.pressKey(0x6); break;
-              case sf::Keyboard::R: keyboard.pressKey(0xd); break;
-              case sf::Keyboard::A: keyboard.pressKey(0x7); break;
-              case sf::Keyboard::S: keyboard.pressKey(0x8); break;
-              case sf::Keyboard::D: keyboard.pressKey(0x9); break;
-              case sf::Keyboard::F: keyboard.pressKey(0xe); break;
-              case sf::Keyboard::Z: keyboard.pressKey(0xa); break;
-              case sf::Keyboard::X: keyboard.pressKey(0x0); break;
-              case sf::Keyboard::C: keyboard.pressKey(0xb); break;
-              case sf::Keyboard::V: keyboard.pressKey(0xf); break;
-          }
-          break;
-        case(sf::Event::KeyReleased):
-            switch(event.key.code)
-            {
-              case sf::Keyboard::Num1: keyboard.releaseKey(0x1); break;
-              case sf::Keyboard::Num2: keyboard.releaseKey(0x2); break;
-              case sf::Keyboard::Num3: keyboard.releaseKey(0x3); break;
-              case sf::Keyboard::Num4: keyboard.releaseKey(0xc); break;
-              case sf::Keyboard::Q: keyboard.releaseKey(0x4); break;
-              case sf::Keyboard::W: keyboard.releaseKey(0x5); break;
-              case sf::Keyboard::E: keyboard.releaseKey(0x6); break;
-              case sf::Keyboard::R: keyboard.releaseKey(0xd); break;
-              case sf::Keyboard::A: keyboard.releaseKey(0x7); break;
-              case sf::Keyboard::S: keyboard.releaseKey(0x8); break;
-              case sf::Keyboard::D: keyboard.releaseKey(0x9); break;
-              case sf::Keyboard::F: keyboard.releaseKey(0xe); break;
-              case sf::Keyboard::Z: keyboard.releaseKey(0xa); break;
-              case sf::Keyboard::X: keyboard.releaseKey(0x0); break;
-              case sf::Keyboard::C: keyboard.releaseKey(0xb); break;
-              case sf::Keyboard::V: keyboard.releaseKey(0xf); break;
-
-            }
-            break;
-        }
-    }
-
-    if (opcode_per_second < limit)
-    {
-      doCycle();
-      opcode_per_second++;
-    }
-
-    double time2 = (double) clock() / CLOCKS_PER_SEC;
-
-    if (time2 - time1 >=  1.0/60.0)
-    {
-
-      if (m_DelayTimer > 0)
-        --m_DelayTimer;
-
-      if (m_SoundTimer > 0)
-        --m_SoundTimer;
-
-        time1 = (double) clock() / CLOCKS_PER_SEC;
-
-
-    if (true)
-    {
-
-      sf::RectangleShape rectangle;
-      rectangle.setSize(sf::Vector2f(10, 10));
-
-      for (int i = 0; i < SCREENSIZE; i++)
-      {
-        rectangle.setPosition((i % 64) * 10, (i / 64) * 10);
-        if (m_gfx[i] == 1)
-          rectangle.setFillColor(sf::Color::Black);
-        else
-          rectangle.setFillColor(sf::Color::White);
-
-        window.draw(rectangle);
-      }
-
-      opcode_per_second = 0;
-
-      // end the current frame
-      window.display();
-      drawFlag = false;
-      //usleep(1000000);
-    }
-  }
-  //    drawFlag = false;
-    }
-  //}
-}

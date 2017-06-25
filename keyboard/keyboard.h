@@ -1,23 +1,30 @@
-#ifndef __KEYBOARD__H__
-#define __KEYBOARD__H__
+/*
+ *  Mega emulator chip8
+ *  Copyright (C) 2017 Atayan Garik <olympg@yandex.ru>
+ *
+ *  This program is free software
+ *  may 2017
+ */
+
+
+#ifndef __CHIP8KEYBOARD__H
+#define __CHIP8KEYBOARD__H
+
 
 #include <stdint.h>
 
-class Keyboard
+#define KEYCOUNT 16
+class Chip8Keyboard
 {
-public:
-    Keyboard();
-    //~Keyboard();
-    void pressKey(uint8_t keyNumber);
-    void releaseKey(uint8_t keyNumber);
-    bool isKeyPressed(uint8_t keyNumber);
-    int isAnyKeyPressed();
-    void dump();
+    public:
+        Chip8Keyboard();
+        void pressKey(uint8_t keyNumber);
+        void releaseKey(uint8_t keyNumber);
+        bool isKeyPressed(uint8_t keyNumber);
+        int isAnyKeyPressed();
 
-
-private:
-    bool key[16];
+    private:
+        bool m_key[KEYCOUNT];
 };
 
 #endif
-
